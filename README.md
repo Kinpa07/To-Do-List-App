@@ -19,8 +19,8 @@ Allows you to add, edit, delete, and filter tasks with priority and due dates.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/yourrepo.git
-   cd yourrepo
+   git clone https://github.com/Kinpa07/To-Do-List-App.git
+   cd To-Do-List-App
 
 2. Create and activate a virtual environment:
 python3 -m venv venv
@@ -34,6 +34,8 @@ pip install -r requirements.txt
 flask run
 
 Usage
+The database will be automatically created
+
 Add new tasks in the form at the top
 
 Click Edit on a task to update it

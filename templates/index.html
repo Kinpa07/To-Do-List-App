@@ -1,3 +1,4 @@
+<!-- Basic HTML document setup with meta tags for responsiveness and Bootstrap CDN -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,6 +7,7 @@
     <title>My Tasks</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
+<!-- Conditional attributes to reopen edit form with prefilled values if needed -->
 <body 
     class="bg-light p-4"
     {% if reopen_id %}
@@ -20,18 +22,21 @@
 <div class="container">
     <h1 id="main-header" class="mb-4 text-primary text-center">My Tasks</h1>
 
+    <!-- Show error message if one exists -->
     {% if error %}
         <div class="alert alert-danger">{{ error }}</div>
     {% endif %}
 
-    <!-- Add Task Form -->
+    <!-- Form to add a new task -->
     <form method="POST" action="/tasks" id="add-form" class="card p-3 mb-4">
         <div class="mb-3">
+            <!-- Title input field -->
             <input type="text" name="title" class="form-control" placeholder="Task title" required
                    value="{{ form_data.title if form_data else '' }}" />
         </div>
 
         <div class="mb-3">
+            <!-- Priority selection dropdown -->
             <select name="priority" class="form-select" required>
                 <option value="">Priority</option>
                 <option value="low" {% if form_data and form_data.priority == 'low' %}selected{% endif %}>Low</option>
@@ -41,15 +46,17 @@
         </div>
 
         <div class="mb-3">
+            <!-- Due date input -->
             <label for="due_date" class="form-label">Due Date:</label>
             <input type="datetime-local" name="due_date" class="form-control"
                    value="{{ form_data.due_date if form_data else '' }}" />
         </div>
 
+        <!-- Submit button -->
         <button type="submit" class="btn btn-primary">Add Task</button>
     </form>
 
-    <!-- Filter Form -->
+    <!-- Filter dropdown to filter tasks by their status -->
     <form method="GET" action="/tasks" id="filter-form" class="mb-4">
         <div class="mb-3">
             <label for="status" class="form-label">Filter by status:</label>
@@ -61,12 +68,13 @@
         </div>
     </form>
 
-    <!-- Task List -->
+    <!-- List of all tasks rendered dynamically -->
     <div id="task-list" class="row">
         {% for task in tasks %}
             <div class="col-md-6 col-lg-4 mb-3">
                 <div class="card h-100 border-primary">
                     <div class="card-body">
+                        <!-- Task details -->
                         <h5 class="card-title">{{ task[1] }}</h5>
                         <p class="card-text">
                             <strong>Priority:</strong> {{ task[3] or 'None' }}<br>
@@ -84,6 +92,8 @@
                                 <span class="text-warning">Pending</span>
                             {% endif %}
                         </p>
+
+                        <!-- Edit and delete buttons -->
                         <div class="d-flex justify-content-between">
                             <button class="btn btn-sm btn-outline-primary edit-btn"
                                 data-task-id="{{ task[0] }}"
@@ -92,6 +102,7 @@
                                 data-priority="{{ task[3] }}"
                                 data-due-date="{{ (task[4] or '')|replace(' ', 'T') }}"
                             >Edit</button>
+
                             <form method="POST" action="/delete/{{ task[0] }}">
                                 <button type="submit" class="btn btn-sm btn-outline-danger"
                                         onclick="return confirm('Are you sure you want to delete this task?');">
@@ -107,14 +118,16 @@
         {% endfor %}
     </div>
 
-    <!-- Edit Form -->
+    <!-- Hidden form that appears when editing a task -->
     <div id="edit-wrapper" style="display:none;">
         <form method="POST" id="edit-form" class="card p-3 mb-4">
+            <!-- Title input -->
             <div class="mb-3">
                 <label for="edit-title" class="form-label">Title:</label>
                 <input type="text" name="title" id="edit-title" class="form-control" required />
             </div>
 
+            <!-- Priority dropdown -->
             <div class="mb-3">
                 <label for="edit-priority" class="form-label">Priority:</label>
                 <select name="priority" id="edit-priority" class="form-select" required>
@@ -125,118 +138,123 @@
                 </select>
             </div>
 
+            <!-- Due date input -->
             <div class="mb-3">
                 <label for="edit-due-date" class="form-label">Due Date:</label>
                 <input type="datetime-local" name="due_date" id="edit-due-date" class="form-control" />
             </div>
 
+            <!-- Checkbox for "Done" status -->
             <div class="form-check mb-3">
                 <input type="checkbox" name="done" id="edit-done" class="form-check-input" />
                 <label for="edit-done" class="form-check-label">Done</label>
             </div>
 
+            <!-- Save and cancel buttons -->
             <button type="submit" class="btn btn-success">Save</button>
             <button type="button" id="cancel-edit" class="btn btn-secondary">Cancel</button>
         </form>
     </div>
 </div>
 
-    <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        const taskList = document.getElementById('task-list');
-        const editWrapper = document.getElementById('edit-wrapper');
-        const editForm = document.getElementById('edit-form');
-        const editTitle = document.getElementById('edit-title');
-        const editPriority = document.getElementById('edit-priority');
-        const editDone = document.getElementById('edit-done');
-        const cancelBtn = document.getElementById('cancel-edit');
-        const addForm = document.getElementById('add-form');
-        const header = document.getElementById('main-header');
-        const editDueDate = document.getElementById('edit-due-date');
-        const filterForm = document.getElementById('filter-form');
-        const body = document.body;
+<!-- JavaScript for dynamic behavior -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const taskList = document.getElementById('task-list');
+    const editWrapper = document.getElementById('edit-wrapper');
+    const editForm = document.getElementById('edit-form');
+    const editTitle = document.getElementById('edit-title');
+    const editPriority = document.getElementById('edit-priority');
+    const editDone = document.getElementById('edit-done');
+    const cancelBtn = document.getElementById('cancel-edit');
+    const addForm = document.getElementById('add-form');
+    const header = document.getElementById('main-header');
+    const editDueDate = document.getElementById('edit-due-date');
+    const filterForm = document.getElementById('filter-form');
+    const body = document.body;
 
-        // Hide filter form if editing
-        if (body.dataset.editing === "true" || body.dataset.reopenId) {
-            if (filterForm) {
-                filterForm.style.display = 'none';
-            }
+    // Hide filter form if edit mode is active
+    if (body.dataset.editing === "true" || body.dataset.reopenId) {
+        if (filterForm) {
+            filterForm.style.display = 'none';
         }
+    }
 
-        // Attach edit button listeners
-        document.querySelectorAll('.edit-btn').forEach(button => {
-            button.addEventListener('click', () => {
-                taskList.style.display = 'none';
-                addForm.style.display = 'none';
-                header.textContent = 'Task Editor';
-
-                if (filterForm) filterForm.style.display = 'none';  // Hide filter on edit
-
-                const title = button.dataset.title || '';
-                const priority = (button.dataset.priority || '').toLowerCase();
-                const done = button.dataset.done === "1";
-                const dueDate = button.dataset.dueDate || '';
-
-                editTitle.value = title;
-                editPriority.value = priority;
-                editDone.checked = done;
-                editDueDate.value = dueDate;
-
-                cancelBtn.dataset.originalTitle = title;
-                cancelBtn.dataset.originalPriority = priority;
-                cancelBtn.dataset.originalDone = button.dataset.done;
-                cancelBtn.dataset.originalDueDate = dueDate;
-
-                editForm.action = `/update/${button.dataset.taskId}`;
-                editWrapper.style.display = 'block';
-            });
-        });
-
-        // Cancel edit
-        cancelBtn.addEventListener('click', () => {
-    const hasChanges =
-        cancelBtn.dataset.originalTitle !== editTitle.value ||
-        cancelBtn.dataset.originalPriority !== editPriority.value.toLowerCase() ||
-        cancelBtn.dataset.originalDone !== (editDone.checked ? "1" : "0") ||
-        cancelBtn.dataset.originalDueDate !== editDueDate.value;
-
-    if (hasChanges && !confirm("Discard your changes?")) return;
-
-    const errorParagraph = document.querySelector('p[style*="color: red"]');
-    if (errorParagraph) errorParagraph.remove();
-
-    editWrapper.style.display = 'none';
-    addForm.style.display = 'block';
-    header.textContent = 'My Tasks';
-    if (filterForm) filterForm.style.display = 'block';
-
-    // Instead of toggling display inline styles quickly,
-    // remove taskList from DOM flow and re-add after a small timeout:
-    taskList.style.display = 'none';
-
-    setTimeout(() => {
-        taskList.style.display = 'flex';  // or 'block' — see which matches your layout better
-        taskList.classList.add('row');    // ensure row class is applied if accidentally removed
-    }, 10);
-});
-
-        // Auto-open edit mode on error
-        const reopenId = body.dataset.reopenId;
-        if (reopenId) {
+    // Handle Edit button click: prefill the edit form and show it
+    document.querySelectorAll('.edit-btn').forEach(button => {
+        button.addEventListener('click', () => {
             taskList.style.display = 'none';
             addForm.style.display = 'none';
             header.textContent = 'Task Editor';
+
+            if (filterForm) filterForm.style.display = 'none';
+
+            // Populate the edit form with task data
+            const title = button.dataset.title || '';
+            const priority = (button.dataset.priority || '').toLowerCase();
+            const done = button.dataset.done === "1";
+            const dueDate = button.dataset.dueDate || '';
+
+            editTitle.value = title;
+            editPriority.value = priority;
+            editDone.checked = done;
+            editDueDate.value = dueDate;
+
+            // Save original values to detect unsaved changes
+            cancelBtn.dataset.originalTitle = title;
+            cancelBtn.dataset.originalPriority = priority;
+            cancelBtn.dataset.originalDone = button.dataset.done;
+            cancelBtn.dataset.originalDueDate = dueDate;
+
+            // Set form action to update the correct task
+            editForm.action = `/update/${button.dataset.taskId}`;
             editWrapper.style.display = 'block';
-
-            editTitle.value = body.dataset.editTitle || '';
-            editPriority.value = (body.dataset.editPriority || '').toLowerCase();
-            editDueDate.value = body.dataset.editDueDate || '';
-            editDone.checked = body.dataset.editDone === "1";
-
-            editForm.action = `/update/${reopenId}`;
-            window.scrollTo(0, 0);
-        }
+        });
     });
-    </script>
+
+    // Cancel editing, restore the original task view
+    cancelBtn.addEventListener('click', () => {
+        const hasChanges =
+            cancelBtn.dataset.originalTitle !== editTitle.value ||
+            cancelBtn.dataset.originalPriority !== editPriority.value.toLowerCase() ||
+            cancelBtn.dataset.originalDone !== (editDone.checked ? "1" : "0") ||
+            cancelBtn.dataset.originalDueDate !== editDueDate.value;
+
+        if (hasChanges && !confirm("Discard your changes?")) return;
+
+        const errorParagraph = document.querySelector('p[style*="color: red"]');
+        if (errorParagraph) errorParagraph.remove();
+
+        // Hide editor, show task list again
+        editWrapper.style.display = 'none';
+        addForm.style.display = 'block';
+        header.textContent = 'My Tasks';
+        if (filterForm) filterForm.style.display = 'block';
+
+        taskList.style.display = 'none';
+        setTimeout(() => {
+            taskList.style.display = 'flex';
+            taskList.classList.add('row');
+        }, 10);
+    });
+
+    // Auto-open edit mode if there was a form error
+    const reopenId = body.dataset.reopenId;
+    if (reopenId) {
+        taskList.style.display = 'none';
+        addForm.style.display = 'none';
+        header.textContent = 'Task Editor';
+        editWrapper.style.display = 'block';
+
+        editTitle.value = body.dataset.editTitle || '';
+        editPriority.value = (body.dataset.editPriority || '').toLowerCase();
+        editDueDate.value = body.dataset.editDueDate || '';
+        editDone.checked = body.dataset.editDone === "1";
+
+        editForm.action = `/update/${reopenId}`;
+        window.scrollTo(0, 0);
+    }
+});
+</script>
 </body>
 </html>
