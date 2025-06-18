@@ -11,12 +11,12 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         done BOOLEAN NOT NULL DEFAULT 0,
-        priority TEXT,             
+        priority TEXT,
+        due_date TEXT,             
         created_at TEXT NOT NULL          
- 
-       )
-''')
-    
+    )
+    ''')
+
     conn.commit()
     conn.close()
 
@@ -34,16 +34,36 @@ def tasks():
             tasks = get_all_tasks()
         except Exception:
             return "Failed to retrieve all tasks", 500
-        return render_template("index.html", tasks = tasks)
-        
+        return render_template("index.html", tasks=tasks, error=None, form_data=None, reopen_id=None)
+
     elif request.method == "POST":
         title = request.form.get("title")
         priority = request.form.get("priority")
+        due_date = request.form.get("due_date")
+
+        error = None
 
         if not title:
-            return "Title is required", 400
+            error = "Title is required."
+
         try:
-            insert_task(title, priority,)
+            if due_date:
+                due_date_obj = datetime.strptime(due_date, "%Y-%m-%dT%H:%M")
+                if due_date_obj.date() < datetime.today().date():
+                    error = "Due date cannot be in the past."
+        except ValueError:
+            error = "Invalid due date format, use YYYY-MM-DDTHH:MM."
+
+        if error:
+            try:
+                tasks = get_all_tasks()
+            except Exception:
+                return "Failed to retrieve all tasks", 500
+            return render_template("index.html", tasks=tasks, error=error, 
+                                   form_data={"title": title, "priority": priority, "due_date": due_date}, reopen_id=None)
+
+        try:
+            insert_task(title, priority, due_date)
         except Exception:
             return "Failed to add task.", 500
         return redirect("/tasks")
@@ -53,18 +73,49 @@ def update(task_id):
     title = request.form.get("title")
     priority = request.form.get("priority").strip().lower()
     done = request.form.get("done")
+    due_date = request.form.get("due_date")
 
     if done == "on":
         done = 1
-    
     else:
         done = 0
 
     valid_priorities = ["high", "medium", "low"]
-    if priority is None or priority not in valid_priorities:
-        return "Priority is required and must be High, Medium, or Low.", 400
+    error = None
+
+    if not title:
+        error = "Title is required."
+    elif priority not in valid_priorities:
+        error = "Priority must be High, Medium, or Low."
+    elif due_date:
+        try:
+            due_date_obj = datetime.strptime(due_date, "%Y-%m-%dT%H:%M")
+            if due_date_obj.date() < datetime.today().date():
+                error = "Due date cannot be in the past."
+        except ValueError:
+            error = "Invalid due date format, use YYYY-MM-DDTHH:MM."
+
+    if error:
+        try:
+            tasks = get_all_tasks()
+        except Exception:
+            return "Failed to retrieve tasks.", 500
+        # Pass submitted form data back to the template for prefilling
+        return render_template(
+            "index.html",
+            tasks=tasks,
+            error=error,
+            reopen_id=task_id,
+            form_data={
+                "title": title,
+                "priority": priority,
+                "due_date": due_date,
+                "done": str(done),
+            }
+        )
+
     try:
-        update_task(task_id, title=title, priority=priority, done=done)
+        update_task(task_id, title=title, priority=priority, done=done, due_date=due_date)
     except Exception:
         return "Failed to update task.", 500
     return redirect("/tasks")
@@ -76,15 +127,22 @@ def delete(task_id):
     except Exception:
         return "Failed to delete task." , 500
     return redirect("/tasks")
+
+@app.template_filter('datetimeformat')
+def datetimeformat(value):
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M").strftime("%b %d, %Y at %I:%M %p")
+    except Exception:
+        return value
     
 
-def insert_task(title, priority):
+def insert_task(title, priority, due_date):
     conn = None
     try:
         conn = sqlite3.connect("tasks.db")
         cursor = conn.cursor()
         created_at = datetime.now().strftime(("%Y-%m-%d %H:%M"))
-        cursor.execute("INSERT INTO tasks (created_at, title,  priority) VALUES (?, ?, ?)", (created_at, title, priority))
+        cursor.execute("INSERT INTO tasks (created_at, title,  priority, due_date) VALUES (?, ?, ?, ?)", (created_at, title, priority, due_date))
         conn.commit()
     except sqlite3.Error as e:
          print(f"Database error: {e}")
@@ -109,7 +167,7 @@ def get_all_tasks():
 
     return tasks
 
-def update_task(task_id, title=None, priority = None, done = None):
+def update_task(task_id, title=None, priority = None, done = None, due_date = None):
     conn = None
     try:
         conn = sqlite3.connect("tasks.db")
@@ -129,6 +187,10 @@ def update_task(task_id, title=None, priority = None, done = None):
         if done is not None:
             fields.append("done = ?")
             values.append(done)
+        
+        if due_date is not None:
+            fields.append("due_date = ?")
+            values.append(due_date)
         
         if not fields:
             return
