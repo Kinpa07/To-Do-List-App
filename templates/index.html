@@ -2,15 +2,16 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>Task List</title>
-    <script defer src="{{ url_for('static', filename='tasks.js') }}"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>My Tasks</title>
 </head>
 <body 
     {% if reopen_id %}
+        data-editing="true"
         data-reopen-id="{{ reopen_id }}"
         data-edit-title="{{ form_data.title if form_data else '' }}"
         data-edit-priority="{{ form_data.priority if form_data else '' }}"
-        data-edit-due-date="{{ form_data.due_date if form_data else '' }}"
+        data-edit-due-date="{{ (form_data.due_date if form_data else '')|replace(' ', 'T') }}"
         data-edit-done="{{ form_data.done if form_data else '0' }}"
     {% endif %}
 >
@@ -39,6 +40,17 @@
         <button type="submit">Add Task</button>
     </form>
 
+    <!-- Filter Form -->
+    <form method="GET" action="/tasks" id="filter-form" style="margin-top: 20px;">
+        <label for="status">Filter by status:</label>
+        <select name="status" id="status" onchange="this.form.submit()">
+            <option value="" {% if not status_filter %}selected{% endif %}>All</option>
+            <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+            <option value="done" {% if status_filter == 'done' %}selected{% endif %}>Done</option>
+        </select>
+        <noscript><button type="submit">Filter</button></noscript>
+    </form>
+
     <!-- Task List -->
     <ul id="task-list">
         {% for task in tasks %}
@@ -64,7 +76,7 @@
                     data-title="{{ task[1] }}"
                     data-done="{{ 1 if task[2] else 0 }}"
                     data-priority="{{ task[3] }}"
-                    data-due-date="{{ task[4] or '' }}"
+                    data-due-date="{{ (task[4] or '')|replace(' ', 'T') }}"
                 >Edit</button>
 
                 <!-- Delete Form -->
@@ -104,5 +116,96 @@
             <button type="button" id="cancel-edit">Cancel</button>
         </form>
     </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const taskList = document.getElementById('task-list');
+        const editWrapper = document.getElementById('edit-wrapper');
+        const editForm = document.getElementById('edit-form');
+        const editTitle = document.getElementById('edit-title');
+        const editPriority = document.getElementById('edit-priority');
+        const editDone = document.getElementById('edit-done');
+        const cancelBtn = document.getElementById('cancel-edit');
+        const addForm = document.getElementById('add-form');
+        const header = document.getElementById('main-header');
+        const editDueDate = document.getElementById('edit-due-date');
+        const filterForm = document.getElementById('filter-form');
+        const body = document.body;
+
+        // Hide filter form if editing
+        if (body.dataset.editing === "true" || body.dataset.reopenId) {
+            if (filterForm) {
+                filterForm.style.display = 'none';
+            }
+        }
+
+        // Attach edit button listeners
+        document.querySelectorAll('.edit-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                taskList.style.display = 'none';
+                addForm.style.display = 'none';
+                header.textContent = 'Task Editor';
+
+                if (filterForm) filterForm.style.display = 'none';  // Hide filter on edit
+
+                const title = button.dataset.title || '';
+                const priority = (button.dataset.priority || '').toLowerCase();
+                const done = button.dataset.done === "1";
+                const dueDate = button.dataset.dueDate || '';
+
+                editTitle.value = title;
+                editPriority.value = priority;
+                editDone.checked = done;
+                editDueDate.value = dueDate;
+
+                cancelBtn.dataset.originalTitle = title;
+                cancelBtn.dataset.originalPriority = priority;
+                cancelBtn.dataset.originalDone = button.dataset.done;
+                cancelBtn.dataset.originalDueDate = dueDate;
+
+                editForm.action = `/update/${button.dataset.taskId}`;
+                editWrapper.style.display = 'block';
+            });
+        });
+
+        // Cancel edit
+        cancelBtn.addEventListener('click', () => {
+            const hasChanges =
+                cancelBtn.dataset.originalTitle !== editTitle.value ||
+                cancelBtn.dataset.originalPriority !== editPriority.value.toLowerCase() ||
+                cancelBtn.dataset.originalDone !== (editDone.checked ? "1" : "0") ||
+                cancelBtn.dataset.originalDueDate !== editDueDate.value;
+
+            if (hasChanges && !confirm("Discard your changes?")) return;
+
+            const errorParagraph = document.querySelector('p[style*="color: red"]');
+            if (errorParagraph) errorParagraph.remove();
+
+            editWrapper.style.display = 'none';
+            taskList.style.display = 'block';
+            addForm.style.display = 'block';
+            header.textContent = 'My Tasks';
+
+            if (filterForm) filterForm.style.display = 'block';  // Show filter back on cancel
+        });
+
+        // Auto-open edit mode on error
+        const reopenId = body.dataset.reopenId;
+        if (reopenId) {
+            taskList.style.display = 'none';
+            addForm.style.display = 'none';
+            header.textContent = 'Task Editor';
+            editWrapper.style.display = 'block';
+
+            editTitle.value = body.dataset.editTitle || '';
+            editPriority.value = (body.dataset.editPriority || '').toLowerCase();
+            editDueDate.value = body.dataset.editDueDate || '';
+            editDone.checked = body.dataset.editDone === "1";
+
+            editForm.action = `/update/${reopenId}`;
+            window.scrollTo(0, 0);
+        }
+    });
+    </script>
 </body>
 </html>

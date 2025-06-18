@@ -20,6 +20,33 @@ def init_db():
     conn.commit()
     conn.close()
 
+def get_tasks_filtered(status=None):
+    conn = None
+    try:
+        conn = sqlite3.connect("tasks.db")
+        cursor = conn.cursor()
+
+        base_query = "SELECT * FROM tasks"
+        params = []
+
+        if status == "done":
+            base_query += " WHERE done = 1"
+        elif status == "pending":
+            base_query += " WHERE done = 0"
+
+        base_query += " ORDER BY created_at DESC"
+
+        cursor.execute(base_query, params)
+        tasks = cursor.fetchall()
+
+    except sqlite3.Error as e:
+        print(f"Database error: {e}")
+        raise
+    finally:
+        if conn:
+            conn.close()
+
+    return tasks
 
 app = Flask(__name__)
 
@@ -30,77 +57,105 @@ def home():
 @app.route("/tasks", methods=["GET", "POST"])
 def tasks():
     if request.method == "GET":
+        status_filter = request.args.get("status")  # Get filter from query params
+
         try:
-            tasks = get_all_tasks()
-        except Exception:
-            return "Failed to retrieve all tasks", 500
-        return render_template("index.html", tasks=tasks, error=None, form_data=None, reopen_id=None)
+            tasks = get_tasks_filtered(status_filter)
+        except Exception as e:
+            print(f"Error retrieving tasks: {e}")
+            return "Failed to retrieve tasks", 500
+
+        return render_template("index.html", tasks=tasks, error=None, form_data=None, reopen_id=None, status_filter=status_filter)
 
     elif request.method == "POST":
         title = request.form.get("title")
         priority = request.form.get("priority")
-        due_date = request.form.get("due_date")
+        due_date_str = request.form.get("due_date")
 
         error = None
+        due_date = None
 
         if not title:
             error = "Title is required."
 
-        try:
-            if due_date:
-                due_date_obj = datetime.strptime(due_date, "%Y-%m-%dT%H:%M")
+        if due_date_str and not error:  # only parse if no error yet
+            try:
+                due_date_obj = datetime.strptime(due_date_str, "%Y-%m-%dT%H:%M")
                 if due_date_obj.date() < datetime.today().date():
                     error = "Due date cannot be in the past."
-        except ValueError:
-            error = "Invalid due date format, use YYYY-MM-DDTHH:MM."
+                else:
+                    # format date string as DB expects: "YYYY-MM-DD HH:MM"
+                    due_date = due_date_obj.strftime("%Y-%m-%d %H:%M")
+            except ValueError:
+                error = "Invalid due date format, use YYYY-MM-DDTHH:MM."
 
         if error:
             try:
-                tasks = get_all_tasks()
-            except Exception:
-                return "Failed to retrieve all tasks", 500
-            return render_template("index.html", tasks=tasks, error=error, 
-                                   form_data={"title": title, "priority": priority, "due_date": due_date}, reopen_id=None)
+                tasks = get_tasks_filtered(status=None)  # <-- FIXED here
+            except Exception as e:
+                print(f"Error retrieving tasks while handling form error: {e}")
+                tasks = []  # fallback empty list
 
+            # Re-render form with error and previously entered data
+            return render_template(
+                "index.html",
+                tasks=tasks,
+                error=error,
+                form_data={"title": title, "priority": priority, "due_date": due_date_str},
+                reopen_id=None,
+                status_filter=None
+            )
+
+        # No errors, insert task
         try:
             insert_task(title, priority, due_date)
-        except Exception:
+        except Exception as e:
+            print(f"Error inserting task: {e}")
             return "Failed to add task.", 500
+
         return redirect("/tasks")
+
 
 @app.route("/update/<int:task_id>", methods=["POST"])
 def update(task_id):
     title = request.form.get("title")
-    priority = request.form.get("priority").strip().lower()
+    priority = request.form.get("priority")
     done = request.form.get("done")
-    due_date = request.form.get("due_date")
+    due_date_str = request.form.get("due_date")
 
-    if done == "on":
-        done = 1
-    else:
-        done = 0
-
-    valid_priorities = ["high", "medium", "low"]
     error = None
 
     if not title:
         error = "Title is required."
-    elif priority not in valid_priorities:
-        error = "Priority must be High, Medium, or Low."
-    elif due_date:
+
+    valid_priorities = ["high", "medium", "low"]
+    if priority:
+        priority = priority.strip().lower()
+        if priority not in valid_priorities:
+            error = "Priority must be High, Medium, or Low."
+    else:
+        priority = None  # or set default priority here
+
+    due_date = None
+    if due_date_str:
         try:
-            due_date_obj = datetime.strptime(due_date, "%Y-%m-%dT%H:%M")
+            due_date_obj = datetime.strptime(due_date_str, "%Y-%m-%dT%H:%M")
             if due_date_obj.date() < datetime.today().date():
                 error = "Due date cannot be in the past."
+            else:
+                due_date = due_date_obj.strftime("%Y-%m-%d %H:%M")
         except ValueError:
             error = "Invalid due date format, use YYYY-MM-DDTHH:MM."
+
+    done_flag = 1 if done == "on" else 0
 
     if error:
         try:
             tasks = get_all_tasks()
         except Exception:
             return "Failed to retrieve tasks.", 500
-        # Pass submitted form data back to the template for prefilling
+
+        # Prefill form data on error
         return render_template(
             "index.html",
             tasks=tasks,
@@ -109,15 +164,18 @@ def update(task_id):
             form_data={
                 "title": title,
                 "priority": priority,
-                "due_date": due_date,
-                "done": str(done),
-            }
+                "due_date": due_date_str,
+                "done": done_flag,
+            },
+            status_filter=None
         )
 
     try:
-        update_task(task_id, title=title, priority=priority, done=done, due_date=due_date)
-    except Exception:
+        update_task(task_id, title=title, priority=priority, done=done_flag, due_date=due_date)
+    except Exception as e:
+        print(f"Error updating task: {e}")
         return "Failed to update task.", 500
+
     return redirect("/tasks")
 
 @app.route("/delete/<int:task_id>", methods=["POST"])
@@ -221,7 +279,6 @@ def delete_task(task_id):
         if conn:
             conn.close()
     
-
 
 if __name__ == '__main__':
     init_db()
